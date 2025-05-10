@@ -195,14 +195,15 @@ def login():
         if request.form.get("user") == USERNAME and request.form.get("pass") == PASSWORD:
             logged_in = True
             return redirect("/status")
-    return render_template_string(\"\"\"
-    <form method="post">
-        <h3>Login</h3>
-        Username: <input name="user"><br>
-        Password: <input name="pass" type="password"><br>
-        <input type="submit">
-    </form>
-    \"\"\")
+    return render_template_string("""
+<form method="post">
+    <h3>Login</h3>
+    Username: <input name="user"><br>
+    Password: <input name="pass" type="password"><br>
+    <input type="submit">
+</form>
+""")
+
 
 @app.route("/status")
 def status():
