@@ -104,6 +104,7 @@ recipient_entry.pack()
 email_time_slider = Scale(scroll_frame, from_=10, to=600, label="Seconds before alert", orient=HORIZONTAL)
 email_time_slider.set(60)
 email_time_slider.pack()
+slider_map = [(10, 30), (20, 20), (30, 10)]
 
 def update_email_settings():
     global gmail_user, gmail_pass, recipient_email, email_timer
