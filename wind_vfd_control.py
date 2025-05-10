@@ -33,7 +33,7 @@ mode = "Auto"
 wind_speed = 0
 vfd_output_hz = 0
 manual_hz = 30
-status_text = "Valve OFF"
+status_text = "Valve CLOSED"
 email_timer = 60
 max_wind = 30
 recipient_email = ""
@@ -97,7 +97,7 @@ wind_label = Label(scroll_frame, text="0 MPH", font=("Arial", 24))
 wind_label.pack(pady=5)
 hz_label = Label(scroll_frame, text="0 Hz", font=("Arial", 24))
 hz_label.pack(pady=5)
-valve_label = Label(scroll_frame, text="Valve OFF", font=("Arial", 18))
+valve_label = Label(scroll_frame, text="Valve CLOSED", font=("Arial", 18))
 valve_label.pack(pady=5)
 clock_label = Label(scroll_frame, font=("Arial", 18))
 clock_label.pack(pady=5)
@@ -157,8 +157,11 @@ def read_wind_mph():
     return round(0.01342 * millivolts, 2)
 
 def is_valve_on():
-    current_mv = current_channel.voltage * 1000
-    return current_mv > 200
+    try:
+        current_mv = current_channel.voltage * 1000
+        return current_mv > 200
+    except:
+        return False  # Default to valve CLOSED if no signal
 
 def send_email_alert():
     try:
@@ -180,7 +183,7 @@ def update_vfd(hz):
     except Exception as e:
         print("VFD Error:", e)
 
-# Main logic loop
+# Main loop
 def gui_loop():
     global wind_speed, vfd_output_hz, status_text
 
@@ -200,14 +203,14 @@ def gui_loop():
     threading.Timer(15, lambda: update_vfd(vfd_output_hz)).start()
 
     if is_valve_on():
-        status_text = "Valve ON"
+        status_text = "Valve OPEN"
         if not hasattr(gui_loop, 'on_time'):
             gui_loop.on_time = time.time()
         elif time.time() - gui_loop.on_time > email_timer:
             send_email_alert()
             gui_loop.on_time = time.time() + 3600
     else:
-        status_text = "Valve OFF"
+        status_text = "Valve CLOSED"
         if hasattr(gui_loop, 'on_time'):
             del gui_loop.on_time
 
@@ -226,4 +229,3 @@ def start_web():
 threading.Thread(target=start_web, daemon=True).start()
 root.after(1000, gui_loop)
 root.mainloop()
-
