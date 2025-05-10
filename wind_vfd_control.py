@@ -204,7 +204,6 @@ def login():
 </form>
 """)
 
-
 @app.route("/status")
 def status():
     if not logged_in:
