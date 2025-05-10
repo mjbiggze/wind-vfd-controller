@@ -1,4 +1,3 @@
-# ... [imports and setup remain unchanged]
 import time
 import threading
 from tkinter import *
@@ -12,26 +11,46 @@ import smtplib
 from email.mime.text import MIMEText
 from flask import Flask, request, render_template_string, redirect
 
-# Initialize ADS1115 and Modbus VFD (same as before)
-# ... [unchanged setup]
+# Initialize I2C and ADS1115
+i2c = busio.I2C(board.SCL, board.SDA)
+ads = ADS.ADS1115(i2c)
+wind_channel = AnalogIn(ads, ADS.P0)
+current_channel = AnalogIn(ads, ADS.P1)
 
-# --- Flask setup and global variables remain unchanged ---
+# Initialize VFD
+vfd = minimalmodbus.Instrument('/dev/ttyUSB0', 1)
+vfd.serial.baudrate = 9600
+vfd.serial.timeout = 1
 
-# GUI Setup
+# Flask login setup
+app = Flask(__name__)
+USERNAME = "Mckwind"
+PASSWORD = "18281828"
+logged_in = False
+
+# Global variables
+mode = "Auto"
+wind_speed = 0
+vfd_output_hz = 0
+manual_hz = 30
+status_text = "Valve OFF"
+email_timer = 60
+max_wind = 30
+recipient_email = ""
+gmail_user = ""
+gmail_pass = ""
+slider_map = [(10, 30), (20, 20), (30, 10)]
+
+# GUI setup
 root = Tk()
 root.title("Wind VFD Controller")
 root.geometry("550x720")
 
-# Create scrollable canvas
 canvas = Canvas(root)
 scroll_y = Scrollbar(root, orient="vertical", command=canvas.yview)
 scroll_frame = Frame(canvas)
 
-scroll_frame.bind(
-    "<Configure>",
-    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-)
-
+scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
 canvas.configure(yscrollcommand=scroll_y.set)
 canvas.pack(fill=BOTH, expand=True, side=LEFT)
@@ -46,17 +65,15 @@ def set_mode():
 Radiobutton(scroll_frame, text="Auto", variable=mode_var, value="Auto", command=set_mode).pack()
 Radiobutton(scroll_frame, text="Manual", variable=mode_var, value="Manual", command=set_mode).pack()
 
-# Slider mapping side-by-side layout
+# Slider pairs (MPH and Hz) side-by-side
 slider_vars = []
 for i, (mph, hz) in enumerate(slider_map):
     row = Frame(scroll_frame)
     mph_var = IntVar(value=mph)
     hz_var = IntVar(value=hz)
     slider_vars.append((mph_var, hz_var))
-
     Scale(row, from_=0, to=100, variable=mph_var, label=f"MPH {i+1}", orient=VERTICAL).pack(side=LEFT, padx=10)
     Scale(row, from_=0, to=60, variable=hz_var, label=f"Hz {i+1}", orient=VERTICAL).pack(side=LEFT, padx=10)
-
     row.pack(pady=5)
 
 def update_sliders():
@@ -65,7 +82,7 @@ def update_sliders():
 
 Button(scroll_frame, text="Apply Slider Settings", command=update_sliders).pack(pady=5)
 
-# Manual slider
+# Manual Hz slider
 manual_slider = Scale(scroll_frame, from_=0, to=60, label="Manual Hz", orient=HORIZONTAL)
 manual_slider.set(30)
 manual_slider.config(command=lambda val: update_manual_hz(val))
@@ -75,20 +92,17 @@ def update_manual_hz(val):
     global manual_hz
     manual_hz = int(val)
 
-# Displays
+# Live displays
 wind_label = Label(scroll_frame, text="0 MPH", font=("Arial", 24))
 wind_label.pack(pady=5)
-
 hz_label = Label(scroll_frame, text="0 Hz", font=("Arial", 24))
 hz_label.pack(pady=5)
-
 valve_label = Label(scroll_frame, text="Valve OFF", font=("Arial", 18))
 valve_label.pack(pady=5)
-
 clock_label = Label(scroll_frame, font=("Arial", 18))
 clock_label.pack(pady=5)
 
-# Email settings
+# Email config
 Label(scroll_frame, text="Gmail Address").pack()
 gmail_entry = Entry(scroll_frame, width=40)
 gmail_entry.pack()
@@ -104,7 +118,6 @@ recipient_entry.pack()
 email_time_slider = Scale(scroll_frame, from_=10, to=600, label="Seconds before alert", orient=HORIZONTAL)
 email_time_slider.set(60)
 email_time_slider.pack()
-slider_map = [(10, 30), (20, 20), (30, 10)]
 
 def update_email_settings():
     global gmail_user, gmail_pass, recipient_email, email_timer
@@ -115,7 +128,7 @@ def update_email_settings():
 
 Button(scroll_frame, text="Apply Email Settings", command=update_email_settings).pack(pady=5)
 
-# Web login route
+# Web login
 @app.route("/", methods=["GET", "POST"])
 def login():
     global logged_in
@@ -138,10 +151,36 @@ def status():
         return redirect("/")
     return f"<h2>Wind: {wind_speed:.2f} MPH<br>VFD: {vfd_output_hz:.1f} Hz<br>Valve: {status_text}</h2>"
 
-# Function definitions for logic remain unchanged...
-# read_wind_mph(), is_valve_on(), send_email_alert(), update_vfd(), etc.
+# Utility functions
+def read_wind_mph():
+    millivolts = wind_channel.voltage * 1000
+    return round(0.01342 * millivolts, 2)
 
-# Start GUI and Flask web server
+def is_valve_on():
+    current_mv = current_channel.voltage * 1000
+    return current_mv > 200
+
+def send_email_alert():
+    try:
+        msg = MIMEText("Valve has been ON too long.")
+        msg['Subject'] = "VFD Alert"
+        msg['From'] = gmail_user
+        msg['To'] = recipient_email
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(gmail_user, gmail_pass)
+        server.send_message(msg)
+        server.quit()
+        print("Alert email sent")
+    except Exception as e:
+        print("Email failed:", e)
+
+def update_vfd(hz):
+    try:
+        vfd.write_register(1, int(hz * 10))
+    except Exception as e:
+        print("VFD Error:", e)
+
+# Main logic loop
 def gui_loop():
     global wind_speed, vfd_output_hz, status_text
 
@@ -187,3 +226,4 @@ def start_web():
 threading.Thread(target=start_web, daemon=True).start()
 root.after(1000, gui_loop)
 root.mainloop()
+
