@@ -1,0 +1,22 @@
+{
+  "email": {
+    "username": "your_email@gmail.com",
+    "password": "your_app_password",
+    "recipients": ["alert@example.com"],
+    "current_alert_time": 30
+  },
+  "wind": {
+    "slopes": [
+      {"mph": 5, "hz": 50},
+      {"mph": 10, "hz": 40},
+      {"mph": 15, "hz": 30}
+    ],
+    "max_alert": 25,
+    "calibration": 0.01342
+  },
+  "vfd": {
+    "address": 1,
+    "port": "/dev/ttyUSB0",
+    "baudrate": 9600
+  }
+}
